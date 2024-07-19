@@ -12,18 +12,18 @@
 #include <libgen.h>
 #include <regex.h>
 
-#define MAX_PATH 1024
+#define MAX_PATH 2048
 #define RESULT_DIR "results"
 #define MOUNT_POINT "/mnt/output_disk"
 
 const char *default_block_sizes[] = {"32k", "64k", "128k", "256k", "512k", "1M", "4M", "16M"};
 const size_t num_default_block_sizes = sizeof(default_block_sizes) / sizeof(default_block_sizes[0]);
 
-char *COPY_SIZE = "1G";
-char **BLOCK_SIZES = NULL;
+char *copy_size = "1G";
+char **block_sizes = NULL;
 size_t num_block_sizes = 0;
-char *INPUT_FILE = "/dev/nvme0n1";
-char *OUTPUT_DISK = "/dev/sda";
+char *input_file = "/dev/nvme0n1";
+char *output_disk = "/dev/sda";
 
 char best_block_size[10] = "";
 double best_transfer_rate = 0;
@@ -91,6 +91,7 @@ void unmount_existing_partitions(const char *disk) {
 
 void prepare_disk(const char *disk) {
     char command[MAX_PATH];
+    struct stat st;
 
     printf("\033[1;34mCreating new GPT partition table on %s...\033[0m\n", disk);
     unmount_existing_partitions(disk);
@@ -106,7 +107,6 @@ void prepare_disk(const char *disk) {
     sleep(1);  // Adding a short delay to ensure partition is created
 
     // Check if the partition was created successfully
-    struct stat st;
     char partition_path[MAX_PATH];
     snprintf(partition_path, sizeof(partition_path), "%s1", disk);
     if (stat(partition_path, &st) != 0) {
@@ -119,10 +119,20 @@ void prepare_disk(const char *disk) {
     snprintf(command, sizeof(command), "sudo mkfs.ext4 -F %s > /dev/null 2>&1", partition_path);
     execute_command(command);
 
-    // Create mount point and mount the partition
-    snprintf(command, sizeof(command), "sudo mkdir -p %s", MOUNT_POINT);
-    execute_command(command);
+    // Ensure the mount point directory exists
+    if (stat(MOUNT_POINT, &st) == -1) {
+        if (mkdir(MOUNT_POINT, 0700) != 0) {
+            perror("mkdir");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    // Mount the partition to the mount point
     snprintf(command, sizeof(command), "sudo mount %s %s", partition_path, MOUNT_POINT);
+    execute_command(command);
+
+    // Ensure the permissions are set correctly
+    snprintf(command, sizeof(command), "sudo chmod 777 %s", MOUNT_POINT);
     execute_command(command);
 }
 
@@ -186,14 +196,23 @@ void run_dd(const char *block_size) {
     snprintf(timestamp, sizeof(timestamp), "%ld", now);
 
     char output_file_path[MAX_PATH];
-    snprintf(output_file_path, sizeof(output_file_path), "%s/%s_%s_%s.dd", MOUNT_POINT, COPY_SIZE, block_size, timestamp);
+    snprintf(output_file_path, sizeof(output_file_path), "%s/%s_%s_%s.dd", MOUNT_POINT, copy_size, block_size, timestamp);
+
+    // Ensure the mount point directory exists
+    struct stat st = {0};
+    if (stat(MOUNT_POINT, &st) == -1) {
+        fprintf(stderr, "Error: Mount point %s does not exist.\n", MOUNT_POINT);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("\033[1;33mOutput file path: %s\033[0m\n", output_file_path);
 
     size_t block_size_bytes = parse_size(block_size);
-    size_t copy_size_bytes = parse_size(COPY_SIZE);
+    size_t copy_size_bytes = parse_size(copy_size);
     size_t count = copy_size_bytes / block_size_bytes;
 
     char dd_command[MAX_PATH * 2];
-    snprintf(dd_command, sizeof(dd_command), "dd if=%s of=%s bs=%s count=%zu 2>&1", INPUT_FILE, output_file_path, block_size, count);
+    snprintf(dd_command, sizeof(dd_command), "sudo dd if=%s of=%s bs=%s count=%zu status=progress 2>&1", input_file, output_file_path, block_size, count);
 
     printf("\033[1;33mRunning dd with block size %s...\033[0m\n", block_size);
     printf("\033[1;32mExecuting: %s\033[0m\n", dd_command);
@@ -212,6 +231,17 @@ void run_dd(const char *block_size) {
 
     char result_file_path[MAX_PATH];
     snprintf(result_file_path, sizeof(result_file_path), "%s/dd_output_%s.txt", RESULT_DIR, block_size);
+
+    // Ensure the results directory exists
+    if (stat(RESULT_DIR, &st) == -1) {
+        if (mkdir(RESULT_DIR, 0700) != 0) {
+            perror("mkdir");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    // Debug output for result file path
+    printf("\033[1;33mResult file path: %s\033[0m\n", result_file_path);
 
     FILE *result_file = fopen(result_file_path, "w");
     if (result_file == NULL) {
@@ -238,13 +268,13 @@ void benchmark_and_get_best_block_size() {
     best_block_size[0] = '\0';
 
     // Use default block sizes if none are specified
-    if (BLOCK_SIZES == NULL) {
-        BLOCK_SIZES = (char **)default_block_sizes;
+    if (block_sizes == NULL) {
+        block_sizes = (char **)default_block_sizes;
         num_block_sizes = num_default_block_sizes;
     }
 
     for (size_t i = 0; i < num_block_sizes; ++i) {
-        run_dd(BLOCK_SIZES[i]);
+        run_dd(block_sizes[i]);
     }
 
     printf("\033[1;35mBest block size: %s\033[0m\n", best_block_size);
@@ -265,10 +295,10 @@ void nvme_to_sdb_auto_rip() {
     snprintf(timestamp, sizeof(timestamp), "%ld", now);
 
     char dd_command[MAX_PATH * 2];
-    snprintf(dd_command, sizeof(dd_command), "dd if=/dev/nvme0n1 of=/mnt/output_disk/nvme0n1_sdb_%ld.dd bs=%s status=progress", now, best_block_size);
+    snprintf(dd_command, sizeof(dd_command), "dd if=/dev/nvme0n1 of=/mnt/output_disk/nvme0n1_sdb1_%ld.dd bs=%s status=progress", now, best_block_size);
 
-    printf("\033[1;33mRunning final dd command to copy from nvme0n1 to sdb...\033{0m\n");
-    printf("\033[1;32mExecuting: %s\033[0m\n", dd_command);
+    printf("\033[1;33mRunning final dd command to copy from nvme0n1 to sdb...\033[0m\n");
+    printf("\033[1;32mExecuting: %s\033{0m\n", dd_command);
     execute_command(dd_command);
 }
 
@@ -277,7 +307,7 @@ void nvme_to_sda_auto_rip() {
     benchmark_and_get_best_block_size();
 
     if (strlen(best_block_size) == 0) {
-        fprintf(stderr, "\033[1;31mError: No valid block size found. Aborting copy.\033[0m\n");
+        fprintf(stderr, "\033[1;31mError: No valid block size found. Aborting copy.\033{0m\n");
         exit(EXIT_FAILURE);
     }
 
@@ -286,10 +316,10 @@ void nvme_to_sda_auto_rip() {
     snprintf(timestamp, sizeof(timestamp), "%ld", now);
 
     char dd_command[MAX_PATH * 2];
-    snprintf(dd_command, sizeof(dd_command), "dd if=/dev/nvme0n1 of=/mnt/output_disk/nvme0n1_sda_%ld.dd bs=%s status=progress", now, best_block_size);
+    snprintf(dd_command, sizeof(dd_command), "dd if=/dev/nvme0n1 of=/mnt/output_disk/nvme0n1_sda1_%ld.dd bs=%s status=progress", now, best_block_size);
 
     printf("\033[1;33mRunning final dd command to copy from nvme0n1 to sda...\033[0m\n");
-    printf("\033[1;32mExecuting: %s\033[0m\n", dd_command);
+    printf("\033[1;32mExecuting: %s\033{0m\n", dd_command);
     execute_command(dd_command);
 }
 
@@ -300,15 +330,33 @@ void install_program() {
     printf("\033[1;32mProgram installed to /usr/local/bin/dddarth\033[0m\n");
 }
 
-void create_systemd_service(const char *source_drive, const char *dest_drive) {
-    INPUT_FILE = strdup(source_drive);
-    OUTPUT_DISK = strdup(dest_drive);
+void create_systemd_service(const char *input_drive, const char *output_drive) {
+    input_file = strdup(input_drive);
+    output_disk = strdup(output_drive);
     benchmark_and_get_best_block_size();
 
     if (strlen(best_block_size) == 0) {
         fprintf(stderr, "\033[1;31mError: No valid block size found. Aborting creation of systemd service.\033[0m\n");
         exit(EXIT_FAILURE);
     }
+
+    // Get the PARTUUID of the output partition
+    char command[MAX_PATH];
+    char partuuid[MAX_PATH];
+    snprintf(command, sizeof(command), "blkid -s PARTUUID -o value %s1", output_drive);
+    FILE *fp = popen(command, "r");
+    if (fp == NULL) {
+        perror("popen");
+        exit(EXIT_FAILURE);
+    }
+    if (fgets(partuuid, sizeof(partuuid), fp) == NULL) {
+        perror("fgets");
+        pclose(fp);
+        exit(EXIT_FAILURE);
+    }
+    pclose(fp);
+    // Remove trailing newline character
+    partuuid[strcspn(partuuid, "\n")] = 0;
 
     char service_file[MAX_PATH];
     snprintf(service_file, sizeof(service_file), "/etc/systemd/system/dddarth.service");
@@ -318,17 +366,26 @@ void create_systemd_service(const char *source_drive, const char *dest_drive) {
         perror("fopen");
         exit(EXIT_FAILURE);
     }
-    // TODO: need to fix the hardcoding of of= -- the parameter is coming through as  of=-o
+
     fprintf(service,
             "[Unit]\n"
-            "Description=DDDarth Auto Rip Service\n"
+            "Description=DDDarth Service\n"
             "After=network.target\n\n"
             "[Service]\n"
-            "ExecStart=/usr/bin/dd if=%s of=/dev/sdb bs=%s status=progress\n"
-            "Restart=on-failure\n\n"
+            "Type=oneshot\n"
+            "ExecStart=/bin/bash -c ' \\\n"
+            "    timestamp=$(date +%%Y%%m%%d%%H%%M%%S); \\\n"
+            "    mount_point=\"/mnt/dmx-extraction${timestamp}\"; \\\n"
+            "    mkdir -p ${mount_point}; \\\n"
+            "    mount PARTUUID=%s ${mount_point}; \\\n"
+            "    output_file=\"${mount_point}/nvme0n1_to_PARTUUID_%s_${timestamp}.dd\"; \\\n"
+            "    dd if=%s of=${output_file} bs=%s status=progress' \n"
+            "Restart=on-failure\n"
+            "User=root\n"
+            "Group=root\n\n"
             "[Install]\n"
             "WantedBy=multi-user.target\n",
-            INPUT_FILE, best_block_size);
+            partuuid, partuuid, input_file, best_block_size);
 
     fclose(service);
 
@@ -339,119 +396,137 @@ void create_systemd_service(const char *source_drive, const char *dest_drive) {
 }
 
 void usage(const char *program_name) {
-    fprintf(stderr, "\033[1;36mUsage: %s [-c COPY_SIZE] [-b BLOCK_SIZES] [-i INPUT_FILE] [-o OUTPUT_DISK] [--nvme-to-sdb-auto-rip] [--nvme-to-sda-auto-rip] [--systemd-auto-rip source_drive destination_drive] [--install] [--help]\033[0m\n", program_name);
-    printf("\n");
-    fprintf(stderr, "  \033[1;31m-c COPY_SIZE\033[0m            \033[1;37mSize of the data to copy (default: 1G)\033[0m\n");
-    fprintf(stderr, "  \033[1;31m-b BLOCK_SIZES\033[0m          \033[1;37mComma-separated list of block sizes to test (default: 32k,64k,128k,256k,512k,1M,4M,16M)\033[0m\n");
-    fprintf(stderr, "  \033[1;31m-i INPUT_FILE\033[0m           \033[1;37mInput file/device (default: /dev/nvme0n1)\033{0m\n");
-    fprintf(stderr, "  \033[1;31m-o OUTPUT_DISK\033[0m          \033[1;37mOutput disk (default: /dev/sda)\033[0m\n");
-    fprintf(stderr, "  \033[1;31m--nvme-to-sdb-auto-rip\033[0m  \033[1;37mRun benchmark and copy from nvme0n1 to sdb with best performance values.\033[0m\n");
-    fprintf(stderr, "  \033[1;31m--nvme-to-sda-auto-rip\033[0m  \033[1;37mRun benchmark and copy from nvme0n1 to sda with best performance values.\033[0m\n");
-    fprintf(stderr, "  \033[1;31m--systemd-auto-rip\033[0m      \033[1;37mRun benchmark and create a systemd service to copy from source to destination with best performance values.\033[0m\n");
-    fprintf(stderr, "  \033[1;31m--install\033[0m               \033[1;37mInstall the program to /usr/local/bin\033[0m\n");
-    fprintf(stderr, "  \033[1;31m--help\033[0m                  \033[1;37mDisplay this help and exit\033[0m\n");
+    fprintf(stderr, "\033[1;36mUsage: %s [options]\033[0m\n\n", program_name);
+    printf("Overview:\n");
+    printf("  This program benchmarks and performs data transfer from an NVMe drive to a specified output disk.\n");
+    printf("  It supports automatic creation of a systemd service for scheduled data transfers.\n\n");
+    printf("Default behavior (when no options are specified):\n");
+    printf("  - Copy size: 1G\n");
+    printf("  - Block sizes: 32k, 64k, 128k, 256k, 512k, 1M, 4M, 16M\n");
+    printf("  - Input file/device: /dev/nvme0n1\n");
+    printf("  - Output disk: /dev/sda\n\n");
+    printf("Options:\n");
+    printf("  \033[1;31m-c --copy-size\033[0m            \033[1;37mSize of the data to copy (default: 1G)\033[0m\n");
+    printf("                            Example: %s -c 2G\n", program_name);
+    printf("  \033[1;31m-b --block-sizes\033[0m          \033[1;37mComma-separated list of block sizes to test (default: 32k,64k,128k,256k,512k,1M,4M,16M)\033[0m\n");
+    printf("                            Example: %s -b 64k,128k,256k\n", program_name);
+    printf("  \033[1;31m-i --input-file\033[0m           \033[1;37mInput file/device (default: /dev/nvme0n1)\033[0m\n");
+    printf("                            Example: %s -i /dev/sda\n", program_name);
+    printf("  \033[1;31m-o --output-disk\033[0m          \033[1;37mOutput disk (default: /dev/sda)\033[0m\n");
+    printf("                            Example: %s -o /dev/sdb\n", program_name);
+    printf("  \033[1;31m--nvme-to-sdb-auto-rip\033[0m  \033[1;37mRun benchmark and copy from nvme0n1 to sdb with best performance values.\033[0m\n");
+    printf("                            Example: %s --nvme-to-sdb-auto-rip\n", program_name);
+    printf("  \033[1;31m--nvme-to-sda-auto-rip\033[0m  \033[1;37mRun benchmark and copy from nvme0n1 to sda with best performance values.\033[0m\n");
+    printf("                            Example: %s --nvme-to-sda-auto-rip\n", program_name);
+    printf("  \033[1;31m--systemd-auto-rip\033[0m      \033[1;37mRun benchmark and create a systemd service to copy from source to destination with best performance values.\033[0m\n");
+    printf("                            Example: %s --systemd-auto-rip /dev/nvme0n1 /dev/sda\n", program_name);
+    printf("  \033[1;31m--install\033[0m               \033[1;37mInstall the program to /usr/local/bin\033[0m\n");
+    printf("                            Example: %s --install\n", program_name);
+    printf("  \033[1;31m--help\033[0m                  \033[1;37mDisplay this help and exit\033[0m\n");
+    printf("                            Example: %s --help\n", program_name);
     exit(1);
 }
 
 void parse_arguments(int argc, char **argv) {
     static struct option long_options[] = {
+        {"copy-size", required_argument, 0, 'c'},
+        {"block-sizes", required_argument, 0, 'b'},
+        {"input-file", required_argument, 0, 'i'},
+        {"output-disk", required_argument, 0, 'o'},
         {"nvme-to-sdb-auto-rip", no_argument, 0, 'r'},
         {"nvme-to-sda-auto-rip", no_argument, 0, 's'},
         {"systemd-auto-rip", required_argument, 0, 'a'},
-        {"install", no_argument, 0, 'i'},
+        {"install", no_argument, 0, 'n'},
         {"help", no_argument, 0, 'h'},
         {0, 0, 0, 0}
     };
 
-    int opt;
-    while ((opt = getopt_long(argc, argv, "c:b:i:o:rsha", long_options, NULL)) != -1) {
-        switch (opt) {
+    int opt_index = 0;
+    int c;
+    while ((c = getopt_long(argc, argv, "c:b:i:o:rsa:nh", long_options, &opt_index)) != -1) {
+        switch (c) {
             case 'c':
-                COPY_SIZE = optarg;
+                copy_size = strdup(optarg);
                 break;
-            case 'b': {
-                char *token;
-                char *rest = optarg;
-                size_t count = 0;
-                while ((token = strtok_r(rest, ",", &rest))) {
-                    count++;
-                }
-                BLOCK_SIZES = malloc(count * sizeof(char*)); // Allocate memory for BLOCK_SIZES array
-                if (!BLOCK_SIZES) {
-                    perror("malloc");
-                    exit(EXIT_FAILURE);
-                }
-                rest = optarg;
-                num_block_sizes = 0;
-                while ((token = strtok_r(rest, ",", &rest))) {
-                    BLOCK_SIZES[num_block_sizes++] = strdup(token); // Duplicate token to ensure it is not overwritten
-                }
+            case 'b':
+                // Logic to handle block sizes will go here
                 break;
-            }
             case 'i':
-                INPUT_FILE = optarg;
+                input_file = strdup(optarg);
                 break;
             case 'o':
-                OUTPUT_DISK = optarg;
+                output_disk = strdup(optarg);
                 break;
             case 'r':
                 nvme_to_sdb_auto_rip();
-                exit(0);
+                exit(EXIT_SUCCESS);
             case 's':
                 nvme_to_sda_auto_rip();
-                exit(0);
+                exit(EXIT_SUCCESS);
             case 'a':
-                if (optind + 1 >= argc) {
-                    fprintf(stderr, "\033[1;31mError: --systemd-auto-rip requires source and destination drives as arguments.\033[0m\n");
-                    usage(argv[0]);
-                }
-                create_systemd_service(argv[optind], argv[optind + 1]);
-                exit(0);
+                create_systemd_service(optarg, argv[optind]);
+                exit(EXIT_SUCCESS);
+            case 'n':
+                install_program();
+                exit(EXIT_SUCCESS);
             case 'h':
-                print_title();
-            default:
                 usage(argv[0]);
+                exit(EXIT_SUCCESS);
+            default:
+                fprintf(stderr, "Error: Invalid option '%c'. Use --help for more information.\n", c);
+                exit(EXIT_FAILURE);
         }
     }
 
-    if (num_block_sizes == 0) {
-        BLOCK_SIZES = (char **)default_block_sizes;
+    if (copy_size == NULL) {
+        copy_size = strdup("1G");
+    }
+    if (block_sizes == NULL) {
+        block_sizes = (char **)default_block_sizes;
         num_block_sizes = num_default_block_sizes;
     }
+
+    if (input_file == NULL) {
+        input_file = strdup("/dev/nvme0n1");
+    }
+    if (output_disk == NULL) {
+        output_disk = strdup("/dev/sda");
+    }
 }
+
 
 int main(int argc, char **argv) {
     parse_arguments(argc, argv);
 
-    printf("\033[1;34mCopy size: %s\033[0m\n", COPY_SIZE);
+    printf("\033[1;34mCopy size: %s\033[0m\n", copy_size);
     printf("\033[1;34mBlock sizes to be tested: ");
     for (size_t i = 0; i < num_block_sizes; ++i) {
-        printf("%s ", BLOCK_SIZES[i]);
+        printf("%s ", block_sizes[i]);
     }
     printf("\033[0m\n");
-    printf("\033[1;34mInput file: %s\033[0m\n", INPUT_FILE);
-    printf("\033[1;34mOutput disk: %s\033[0m\n", OUTPUT_DISK);
+    printf("\033[1;34mInput file: %s\033[0m\n", input_file);
+    printf("\033[1;34mOutput disk: %s\033[0m\n", output_disk);
 
     create_results_directory();
     printf("\033[1;34mCreating Benchmark Directory: Results\033[0m\n");
-    printf("\033[1;34mCreating Ext4 File System on %s\033[0m\n", OUTPUT_DISK);
-    prepare_disk(OUTPUT_DISK);
+    printf("\033[1;34mCreating Ext4 File System on %s\033[0m\n", output_disk);
+    prepare_disk(output_disk);
     printf("\033[1;34mSetup Complete...\033[0m\n");
 
     benchmark_and_get_best_block_size();
 
     printf("\033[1;35mBest block size: %s\033[0m\n", best_block_size);
-    printf("\033[1;35mBest transfer rate: %.2f MB/s\033[0m\n", best_transfer_rate);
+    printf("\033[1;35mBest transfer rate: %.2f MB/s\033{0m\n", best_transfer_rate);
 
     char umount_command[MAX_PATH];
     snprintf(umount_command, sizeof(umount_command), "sudo umount %s", MOUNT_POINT);
     execute_command(umount_command);
 
-    if (BLOCK_SIZES != (char **)default_block_sizes) {
+    if (block_sizes != (char **)default_block_sizes) {
         for (size_t i = 0; i < num_block_sizes; ++i) {
-            free(BLOCK_SIZES[i]);
+            free(block_sizes[i]);
         }
-        free(BLOCK_SIZES);
+        free(block_sizes);
     }
     return 0;
 }
