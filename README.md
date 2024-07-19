@@ -1,4 +1,4 @@
-# DDDarth: Automated Disk Benchmarking and Copying Tool
+# DDDarth: Automated Performance Oriented DD
 
 ![image](https://github.com/user-attachments/assets/28e16aad-0116-418d-a1a7-7bcf6670bf0e)
 
