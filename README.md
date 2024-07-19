@@ -1,114 +1,127 @@
+## README
+
 # DDDarth: Automated Performance Oriented DD
 
 ![image](https://github.com/user-attachments/assets/28e16aad-0116-418d-a1a7-7bcf6670bf0e)
 
 ![image](https://github.com/user-attachments/assets/403b93b6-4c43-4a0f-b691-159749ec4ab3)
 
-## Overview
+### Overview
 
-DDDarth is a command-line tool designed to automate the process of benchmarking disk performance and then using the optimal block size to copy data from one disk to another. The tool supports various operations, including copying data from NVMe to other NVMes & SATA disks and setting up systemd services to perform these operations on boot.
+This program benchmarks and performs data transfer from any drive to a specified output disk. It supports automatic creation of a systemd service for scheduled data transfers. The program is highly configurable, allowing the user to specify various options such as copy size, block sizes, input file, and output disk.
 
-## Features
+### Features
 
-- Automated disk benchmarking with multiple block sizes
-- Optimal block size determination for best performance
-- Disk preparation with GPT partitioning and ext4 filesystem creation
-- Copying data from NVMe to other NVMes & SATA disks
-- Systemd service creation for automated disk copying on boot
-- Installation to `/usr/local/bin`
+- Benchmarks multiple block sizes to find the best performance.
+- Performs data transfer using the `dd` command.
+- Creates systemd services for automated data transfers.
+- Coming Soon - Supports Luks AES-256 encryption with Argon2 (memory-hard function designed to resist GPU and ASIC attacks) in future releases.
+- Coming Soon - Compatible with arm64, Raspberry Pi, and other ARM-based systems for cross-compilation.
 
-## Usage
+### Default Configuration
 
-```shell
-Usage: ./dddarth [-c COPY_SIZE] [-b BLOCK_SIZES] [-i INPUT_FILE] [-o OUTPUT_DISK] [--nvme-to-sdb-auto-rip] [--nvme-to-sda-auto-rip] [--systemd-auto-rip source_drive destination_drive] [--install] [--help]
+- **Copy size**: 1G
+- **Block sizes**: 32k, 64k, 128k, 256k, 512k, 1M, 4M, 16M
+- **Input file/device**: /dev/nvme0n1
+- **Output disk**: /dev/sda
 
-  -c COPY_SIZE            Size of the data to copy (default: 1G)
-  -b BLOCK_SIZES          Comma-separated list of block sizes to test (default: 32k,64k,128k,256k,512k,1M,4M,16M)
-  -i INPUT_FILE           Input file/device (default: /dev/nvme0n1)
-  -o OUTPUT_DISK          Output disk (default: /dev/sda)
-  --nvme-to-sdb-auto-rip  Run benchmark and copy from nvme0n1 to sdb with best performance values.
-  --nvme-to-sda-auto-rip  Run benchmark and copy from nvme0n1 to sda with best performance values.
-  --systemd-auto-rip      Run benchmark and create a systemd service to copy from source to destination with best performance values.
-  --install               Install the program to /usr/local/bin
-  --help                  Display this help and exit
-```
+### Installation
 
-## Compilation
-
-To compile the program, use the following command:
-
-```shell
-gcc ./dddarth.c -o dddarth
-```
-
-## Commands and Options
-
-### `--nvme-to-sdb-auto-rip`
-
-This command benchmarks disk performance with various block sizes and then copies data from the NVMe disk (`/dev/nvme0n1`) to the SATA disk (`/dev/sdb`) using the optimal block size.
-
-```shell
-sudo ./dddarth --nvme-to-sdb-auto-rip
-```
-
-### `--nvme-to-sda-auto-rip`
-
-Similar to the `--nvme-to-sdb-auto-rip` command, this option benchmarks disk performance and then copies data from the NVMe disk (`/dev/nvme0n1`) to the SATA disk (`/dev/sda`) using the optimal block size.
-
-```shell
-sudo ./dddarth --nvme-to-sda-auto-rip
-```
-
-### `--systemd-auto-rip source_drive destination_drive`
-
-This command benchmarks disk performance and creates a systemd service that will copy data from the specified source drive to the specified destination drive on system boot using the optimal block size.
-
-```shell
-sudo ./dddarth --systemd-auto-rip /dev/nvme0n1 /dev/sda
-```
-
-### `--install`
-
-Installs the `dddarth` program to `/usr/local/bin` for easy access.
-
-```shell
+To install the program, run:
+```sh
 sudo ./dddarth --install
 ```
 
-## Example
+### Usage
 
-Here's an example workflow using DDDarth:
+The program supports various command-line options:
 
-1. **Compile the program:**
+```sh
+Usage: ./dddarth [options]
+  ┌───────────────────────────────┬─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ -c --copy-size                │ Size of the data to copy (default: 1G)                                                                  │
+  │                               │ Example: ./dddarth -c 2G                                                                                │
+  ├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ -b --block-sizes              │ Comma-separated list of block sizes to test (default: 32k,64k,128k,256k,512k,1M,4M,16M)                 │
+  │                               │ Example: ./dddarth -b 64k,128k,256k                                                                     │
+  ├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ -i --input-file               │ Input file/device (default: /dev/nvme0n1)                                                               │
+  │                               │ Example: ./dddarth -i /dev/sda                                                                          │
+  ├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ -o --output-disk              │ Output disk (default: /dev/sdb)                                                                         │
+  │                               │ Example: ./dddarth -o /dev/sdb                                                                          │
+  ├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ --nvme-to-sdb-auto-rip        │ Run benchmark and copy from nvme0n1 to sdb with best performance values.                                │
+  │                               │ Example: ./dddarth --nvme-to-sdb-auto-rip                                                               │
+  ├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ --nvme-to-sda-auto-rip        │ Run benchmark and copy from nvme0n1 to sda with best performance values.                                │
+  │                               │ Example: ./dddarth --nvme-to-sda-auto-rip                                                               │
+  ├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ --systemd-auto-rip            │ Run benchmark and create a systemd service to copy from source to target with best performance values.  │
+  │                               │ Example: ./dddarth --systemd-auto-rip /dev/nvme0n1 /dev/sdb                                             │
+  ├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ --install                     │ Install the program to /usr/local/bin                                                                   │
+  │                               │ Example: ./dddarth --install                                                                            │
+  ├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ --help                        │ Display this help and exit                                                                              │
+  │                               │ Example: ./dddarth --help                                                                               │
+  └───────────────────────────────┴─────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
 
-   ```shell
-   gcc ./dddarth.c -o dddarth
-   ```
+### Example Commands
 
-2. **Install the program:**
+1. **Run benchmark and copy from nvme0n1 to sdb**:
+    ```sh
+    sudo ./dddarth --nvme-to-sdb-auto-rip
+    ```
 
-   ```shell
-   sudo ./dddarth --install
-   ```
+2. **Run benchmark and copy from nvme0n1 to sda**:
+    ```sh
+    sudo ./dddarth --nvme-to-sda-auto-rip
+    ```
 
-3. **Run a benchmark and copy from NVMe to SATA disk:**
+3. **Create a systemd service for automated data transfer**:
+    ```sh
+    sudo ./dddarth --systemd-auto-rip /dev/nvme0n1 /dev/sdb
+    ```
 
-   ```shell
-   sudo ./dddarth --nvme-to-sda-auto-rip
-   ```
+4. **Install the program**:
+    ```sh
+    sudo ./dddarth --install
+    ```
 
-4. **Create a systemd service to perform the copy on boot:**
+### Dependencies
 
-   ```shell
-   sudo ./dddarth --systemd-auto-rip /dev/nvme0n1 /dev/sda
-   ```
+The program requires the following libraries and tools:
 
-5. **Verify the systemd service:**
+- `stdio.h`
+- `stdlib.h`
+- `string.h`
+- `unistd.h`
+- `sys/stat.h`
+- `sys/mount.h`
+- `sys/types.h`
+- `fcntl.h`
+- `time.h`
+- `stdarg.h`
+- `errno.h`
+- `getopt.h`
+- `libgen.h`
+- `regex.h`
+- `pwd.h`
+- `grp.h`
 
-   ```shell
-   sudo systemctl status dddarth.service
-   ```
+### Build
 
-## License
+To build the program, use the following command:
+```sh
+gcc -o dddarth dddarth.c
+```
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+### License
+
+This program is licensed under the MIT License.
+
+### Contributions
+
+Contributions are welcome! Please submit a pull request or open an issue for any improvements or bug fixes.
