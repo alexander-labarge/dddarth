@@ -249,7 +249,7 @@ void change_file_ownership_to_non_root(const char *file_path)
         exit(EXIT_FAILURE);
     }
 
-    //print_debug("Changed ownership of %s to %s:%s", file_path, pw->pw_name, gr->gr_name);
+    // print_debug("Changed ownership of %s to %s:%s", file_path, pw->pw_name, gr->gr_name);
 }
 
 double parse_transfer_rate(const char *dd_output)
@@ -344,7 +344,7 @@ void run_dd(const char *block_size)
         }
     }
 
-    //print_debug("Writing dd output to file: %s", result_file_path);
+    // print_debug("Writing dd output to file: %s", result_file_path);
 
     result_file = fopen(result_file_path, "w");
     if (result_file == NULL)
@@ -408,7 +408,7 @@ void change_file_permissions(const char *file_path)
         exit(EXIT_FAILURE);
     }
 
-    //print_debug("Changed permissions of %s to 0666", file_path);
+    // print_debug("Changed permissions of %s to 0666", file_path);
 }
 
 void change_permissions(const char *path)
@@ -419,7 +419,7 @@ void change_permissions(const char *path)
         exit(EXIT_FAILURE);
     }
 
-    //print_debug("Changed permissions of %s to 0777", path);
+    // print_debug("Changed permissions of %s to 0777", path);
 }
 
 void benchmark_and_get_best_block_size()
@@ -508,14 +508,14 @@ void install_program()
  */
 void create_systemd_service(const char *input_drive, const char *output_drive)
 {
-    //print_debug("Entered create_systemd_service function");
+    // print_debug("Entered create_systemd_service function");
 
     input_file = strdup(input_drive);
     output_disk = strdup(output_drive);
-    //print_debug("Input drive: %s, Output drive: %s", input_file, output_disk);
+    // print_debug("Input drive: %s, Output drive: %s", input_file, output_disk);
 
     benchmark_and_get_best_block_size();
-    //print_debug("Best block size: %s, Best transfer rate: %.2f MB/s", best_block_size, best_transfer_rate);
+    // print_debug("Best block size: %s, Best transfer rate: %.2f MB/s", best_block_size, best_transfer_rate);
 
     if (strlen(best_block_size) == 0)
     {
@@ -529,7 +529,7 @@ void create_systemd_service(const char *input_drive, const char *output_drive)
 
     // Get PARTUUID of the output drive
     snprintf(command, sizeof(command), "blkid -s PARTUUID -o value %s1", output_drive);
-    //print_debug("Command to get PARTUUID of output drive: %s", command);
+    // print_debug("Command to get PARTUUID of output drive: %s", command);
     FILE *fp = popen(command, "r");
     if (fp == NULL)
     {
@@ -551,13 +551,13 @@ void create_systemd_service(const char *input_drive, const char *output_drive)
     }
     pclose(fp);
     partuuid_output[strcspn(partuuid_output, "\n")] = 0;
-    //print_debug("PARTUUID of output drive: %s", partuuid_output);
+    // print_debug("PARTUUID of output drive: %s", partuuid_output);
 
     // Get PARTUUID of the input drive if it's a partition
     if (strchr(input_drive, 'p') != NULL || strchr(input_drive, 's') != NULL)
     {
         snprintf(command, sizeof(command), "blkid -s PARTUUID -o value %s", input_drive);
-        //print_debug("Command to get PARTUUID of input drive: %s", command);
+        // print_debug("Command to get PARTUUID of input drive: %s", command);
         fp = popen(command, "r");
         if (fp == NULL)
         {
@@ -615,7 +615,7 @@ void create_systemd_service(const char *input_drive, const char *output_drive)
             partuuid_output, partuuid_input, partuuid_output, input_file, best_block_size);
 
     fclose(service);
-    //print_debug("Finished writing to service file");
+    // print_debug("Finished writing to service file");
 
     // Print the contents of the systemd service file
     print_debug("Contents of the systemd service file:");
@@ -634,7 +634,7 @@ void create_systemd_service(const char *input_drive, const char *output_drive)
 
     // Execute the systemd commands and check their status
     int ret;
-    //print_debug("Reloading systemd daemon");
+    // print_debug("Reloading systemd daemon");
     ret = system("sudo systemctl daemon-reload");
     if (ret == -1)
     {
@@ -646,9 +646,9 @@ void create_systemd_service(const char *input_drive, const char *output_drive)
         fprintf(stderr, "Failed to reload systemd daemon with exit status %d\n", WEXITSTATUS(ret));
         exit(EXIT_FAILURE);
     }
-    //print_debug("Systemd daemon reloaded");
+    // print_debug("Systemd daemon reloaded");
 
-    //print_debug("Enabling the systemd service");
+    // print_debug("Enabling the systemd service");
     ret = system("sudo systemctl enable dddarth.service");
     if (ret == -1)
     {
@@ -660,7 +660,7 @@ void create_systemd_service(const char *input_drive, const char *output_drive)
         fprintf(stderr, "Failed to enable the systemd service with exit status %d\n", WEXITSTATUS(ret));
         exit(EXIT_FAILURE);
     }
-    //print_debug("Systemd service enabled");
+    // print_debug("Systemd service enabled");
 
     print_colored("\033[1;35m", "Systemd service created and enabled to start on boot.\n");
     printf("\033[0m"); // Reset color back to default
@@ -877,7 +877,7 @@ void parse_block_sizes(const char *optarg)
     while ((token = strtok_r(rest, ",", &rest)))
     {
         block_sizes[num_block_sizes++] = strdup(token);
-        //print_debug("Block size added: %s", token);
+        // print_debug("Block size added: %s", token);
     }
 
     free(input);
