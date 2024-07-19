@@ -1,6 +1,8 @@
 # DDDarth: Automated Disk Benchmarking and Copying Tool
 
-![image](https://github.com/user-attachments/assets/8f101f39-14a8-4132-8fb5-008ce4e0e593)
+![image](https://github.com/user-attachments/assets/28e16aad-0116-418d-a1a7-7bcf6670bf0e)
+
+![image](https://github.com/user-attachments/assets/403b93b6-4c43-4a0f-b691-159749ec4ab3)
 
 ## Overview
 
