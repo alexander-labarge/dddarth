@@ -176,14 +176,7 @@ void prepare_disk(const char *disk)
     snprintf(command, sizeof(command), "sudo mkfs.ext4 -F %s > /dev/null 2>&1", partition_path);
     execute_command(command);
 
-    if (stat(MOUNT_POINT, &st) == -1)
-    {
-        if (mkdir(MOUNT_POINT, 0700) != 0)
-        {
-            perror("mkdir");
-            exit(EXIT_FAILURE);
-        }
-    }
+    ensure_mount_point_exists(); // Ensure the mount point exists
 
     snprintf(command, sizeof(command), "sudo mount %s %s", partition_path, MOUNT_POINT);
     execute_command(command);
@@ -191,6 +184,7 @@ void prepare_disk(const char *disk)
     snprintf(command, sizeof(command), "sudo chmod 777 %s", MOUNT_POINT);
     execute_command(command);
 }
+
 
 void drop_caches()
 {
@@ -305,7 +299,9 @@ void run_dd(const char *block_size)
     char output_file_path[MAX_PATH];
     snprintf(output_file_path, sizeof(output_file_path), "%s/%s_%s_%s_%s.dd", MOUNT_POINT, copy_size, block_size, time_str, timestamp);
 
-    struct stat st = {0};
+    ensure_mount_point_exists(); // Ensure the mount point exists
+
+    struct stat st;
     if (stat(MOUNT_POINT, &st) == -1)
     {
         fprintf(stderr, "Error: Mount point %s does not exist.\n", MOUNT_POINT);
@@ -344,8 +340,6 @@ void run_dd(const char *block_size)
         }
     }
 
-    // print_debug("Writing dd output to file: %s", result_file_path);
-
     result_file = fopen(result_file_path, "w");
     if (result_file == NULL)
     {
@@ -363,7 +357,6 @@ void run_dd(const char *block_size)
     fclose(result_file);
     pclose(fp);
 
-    // Change permissions of the result file to be accessible by everyone
     change_permissions(result_file_path);
 
     result_file = fopen(result_file_path, "r");
@@ -399,6 +392,7 @@ void run_dd(const char *block_size)
         best_transfer_rate = transfer_rate_value;
     }
 }
+
 
 void change_file_permissions(const char *file_path)
 {
@@ -486,6 +480,19 @@ void nvme_to_sda_auto_rip()
     print_colored("\033[1;33m", "Running final dd command to copy from nvme0n1 to sda...\n");
     print_colored("\033[1;32m", "Executing: %s\n", dd_command);
     execute_command(dd_command);
+}
+
+void ensure_mount_point_exists()
+{
+    struct stat st;
+    if (stat(MOUNT_POINT, &st) == -1)
+    {
+        if (mkdir(MOUNT_POINT, 0700) != 0)
+        {
+            perror("mkdir");
+            exit(EXIT_FAILURE);
+        }
+    }
 }
 
 void install_program()
